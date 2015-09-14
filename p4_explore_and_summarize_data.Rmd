@@ -1,0 +1,1007 @@
+---
+title: 'P4: Explore and Summarize Data'
+author: "Mahdi"
+date: "10 Aug 2015"
+output: html_document
+---
+
+Exploring and Summarizing Prosper Loan Data by MAHDI
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+library(ggplot2)
+library(plyr)
+library(GGally)
+library(tidyr)
+library(dplyr)
+library(scales)
+library(gridExtra)
+library(memisc)
+
+```
+
+```{r echo=FALSE, Load_the_Data}
+setwd("~/Projects/P4_Explore_and_Summarize_Data/data")
+pl <- read.csv("prosperLoanData.csv")
+dim(pl)
+```
+
+The dataset contains 81 variables and 113K+ entries. We'll keep only 14 columns and 10K entries for a reasonable processing time. Chosen columns should help achieve our goal.
+
+```{r echo=FALSE, Sample_the_Data}
+# sample 10000 random entries
+dim(pl)
+names(pl)
+set.seed(19840319)
+pl_samp <- pl[sample(1:dim(pl)[1], 10000), ]
+dim(pl_samp)
+
+# keep some variables
+pl_subsamp <- subset(pl_samp,
+                     select = c("ProsperScore",
+                                "Term", "LoanStatus",
+                                "BorrowerRate",
+                                "LenderYield", "ListingCategory..numeric.",
+                                "EmploymentStatus", "EmploymentStatusDuration",
+                                "IsBorrowerHomeowner", "CurrentCreditLines",
+                                "DebtToIncomeRatio",
+                                "IncomeRange", "StatedMonthlyIncome",
+                                "LoanOriginalAmount", "LoanOriginationDate",
+                                "MonthlyLoanPayment"))
+dim(pl_subsamp)
+```
+
+# Univariate Plots Section
+```{r echo=FALSE, Univariate_Plots}
+str(pl_subsamp)
+```
+
+## Prosper Score
+```{r}
+# 11 is less risky
+# transforming ProsperScore to factor
+is.factor(pl_subsamp$ProsperScore)
+pl_subsamp$ProsperScore <- factor(pl_subsamp$ProsperScore, levels = c(1:11))
+
+summary(pl_subsamp$ProsperScore)
+qplot(x = ProsperScore, data = subset(pl_subsamp, !is.na(ProsperScore)),
+      xlab = "Prosper Score") +
+  scale_x_discrete(breaks = seq(1, 11, 1))
+```
+
+Most loans are of middle risk profiles, and low and high risks are almost equally served.
+It will be interesting to check how the risk and the borrower rate relate to each other.
+
+## Term
+```{r}
+pl_subsamp$Term <- factor(pl_subsamp$Term)
+
+summary(pl_subsamp$Term)
+qplot(x = Term, data = pl_subsamp, binwidth=1,
+      xlab = "Term in Months")
+```
+
+There are 3 loan terms: 1y, 3y, 5y.
+Term could be considered as a categorical variable. However, its ditribution shows that there are only 3 terms. So we chose to factorise this variable and consider it as ordinal.
+
+## Loan Status
+```{r}
+# most of loans are current, very few are defaulted, some are charged off
+summary(pl_subsamp$LoanStatus)
+qplot(x = LoanStatus, data = pl_subsamp, 
+      fill = LoanStatus, xlab = "Loan Status") +
+  scale_x_discrete(breaks = NULL)
+
+count(pl_subsamp[pl_subsamp$LoanStatus == "Defaulted",]) / dim(pl_subsamp)[1]
+```
+
+Only 4.06% of loans have resulted in a default since 2005.
+
+## Borrower Rate
+```{r}
+summary(pl_subsamp$BorrowerRate)
+qplot(x = BorrowerRate*100, data = pl_subsamp,
+      binwidth = 1) +
+  scale_x_continuous(breaks = seq(0, 36, 2)) +
+  xlab("Borrower Rate, %")
+qplot(x = BorrowerRate*100, data = pl_subsamp) +
+  scale_x_log10() +
+  xlab("Borrower Rate, %")
+qplot(x = BorrowerRate*100, data = pl_subsamp) +
+  scale_x_sqrt() +
+  xlab("Borrower Rate, %")
+ggplot(aes(x = BorrowerRate*100),
+       data = pl_subsamp) +
+  geom_density() +
+  xlab("Borrower Rate, %")
+```
+
+3/4 quantile of is ~25%. There is a peak at 31%; what could be the reason?
+
+## Lender Yield
+```{r}
+# a peak @ 31%
+summary(pl_subsamp$LenderYield)
+qplot(x = LenderYield*100, data = pl_subsamp,
+      binwidth = 1, xlab = "Lender Yield %") +
+  scale_x_continuous(breaks = seq(0, 36, 2))
+qplot(x = LenderYield, data = pl_subsamp) +
+  scale_x_log10()
+qplot(x = LenderYield, data = pl_subsamp) +
+  scale_x_sqrt()
+```
+
+It looks like BorrowerRate.
+
+## Listing Categories with meaningful text
+```{r}
+# peak for debt consolidation
+pl_subsamp$ListingCategory <- pl_subsamp$ListingCategory..numeric.
+pl_subsamp$ListingCategory <- 
+  plyr::mapvalues(pl_subsamp$ListingCategory,
+            from = c(0:20),
+            to = c("Not Available", "Debt Consolidation", "Home Improvement",
+                   "Business",
+                   "Personal Loan", "Student Use", "Auto", "Other",
+                   "Baby&Adoption", "Boat", "Cosmetic Procedure",
+                   "Engagement Ring", "Green Loans", "Household Expenses",
+                   "Large Purchases", "Medical/Dental", "Motorcycle", "RV",
+                   "Taxes", "Vacation", "Wedding Loans"))
+table(pl_subsamp$ListingCategory..numeric.)
+table(pl_subsamp$ListingCategory)
+
+pl_subsamp.backup.ListingCategory..numeric. <- pl_subsamp$ListingCategory..numeric.
+pl_subsamp <- subset(pl_subsamp, select = -ListingCategory..numeric.)
+pl_subsamp$ListingCategory <- factor(pl_subsamp$ListingCategory)
+dim(pl_subsamp)
+
+qplot(data = pl_subsamp, x = ListingCategory,
+      fill = ListingCategory, xlab = "Listing Category") +
+  scale_x_discrete(breaks = NULL)
+
+with(pl_subsamp, sum(ListingCategory == "Debt Consolidation") /
+       length(ListingCategory))
+```
+
+~51% of loans are for debt consolidation.
+
+## Employment Status
+```{r}
+# most of customers are employed
+summary(pl_subsamp$EmploymentStatus)
+qplot(x = EmploymentStatus, 
+      data = subset(pl_subsamp, EmploymentStatus != ""),
+      fill = EmploymentStatus, xlab = "Employment Status") +
+  scale_x_discrete(breaks = NULL)
+```
+
+Employed borrowers are more likely to get a loan.
+
+## Employment Status Duration
+```{r}
+# half of customers have been working for less than 6 years
+# right skewed distribution with a mean of 9 years
+summary(pl_subsamp$EmploymentStatusDuration)
+qplot(x = EmploymentStatusDuration/12.,
+      data = subset(pl_subsamp, !is.na(EmploymentStatusDuration)),
+      binwidth = 1,
+      xlab = "Employment Status Duration, Years") +
+  scale_x_continuous(breaks = seq(0, 800/12., 4))
+qplot(x = EmploymentStatusDuration/12.+1/365.,
+      data = subset(pl_subsamp, !is.na(EmploymentStatusDuration)),
+      binwidth = 1./12.,
+      xlab = "Employment Status Duration, Years") +
+  scale_x_log10()
+qplot(x = EmploymentStatusDuration/12.+1/365.,
+      data = subset(pl_subsamp, !is.na(EmploymentStatusDuration)),
+      binwidth = 1./12.,
+      xlab = "Employment Status Duration, Years") +
+  scale_x_sqrt()
+ggplot(aes(x = EmploymentStatusDuration/12.),
+       data = subset(pl_subsamp, !is.na(EmploymentStatusDuration))) +
+  geom_density() +
+  xlab("Employment Status Duration, Years")
+```
+
+3/4 quantile of employment duration is 11+ years, mean is ~8- years, median is 5.5 years and 1/4 quantile is ~2+ years.
+Distribution is log-normal with right skew and many borrowers are fresh workers.
+
+## Home Owner?
+```{r}
+summary(pl_subsamp$IsBorrowerHomeowner)
+qplot(data = pl_subsamp, x = IsBorrowerHomeowner)
+```
+
+50.9% of customers own their home. Could this variable have any impact?
+
+## Current Credit Lines
+```{r}
+# normal distribution
+summary(pl_subsamp$CurrentCreditLines)
+qplot(data = pl_subsamp, x = CurrentCreditLines,
+      binwidth = 1, xlab = "Current Credit Lines")
+qplot(data = pl_subsamp, x = CurrentCreditLines,
+      binwidth = 0.01, xlab = "Current Credit Lines") +
+  scale_x_log10()
+```
+
+Half of customers have already 10 credit lines opened at the time of the listing. The distribution is normal with a right skew.
+
+## Debt To Income Ratio
+```{r}
+# skewed distribution to the right
+# square root of DebtToIncomeRatio is normal
+summary(pl_subsamp$DebtToIncomeRatio)
+sum(subset(pl_subsamp, !is.na(DebtToIncomeRatio))$DebtToIncomeRatio>10)
+qplot(data = subset(pl_subsamp, !is.na(DebtToIncomeRatio)),
+      x = DebtToIncomeRatio,
+      binwidth = 0.02) +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio, 0.99, na.rm = TRUE)) +
+  xlab("Debt To Income Ratio")
+qplot(data = subset(pl_subsamp, !is.na(DebtToIncomeRatio)),
+      x = DebtToIncomeRatio,
+      binwidth = 0.15) +
+  scale_x_log10() +
+  xlab("Debt To Income Ratio")
+qplot(data = subset(pl_subsamp, !is.na(DebtToIncomeRatio)),
+      x = DebtToIncomeRatio,
+      binwidth = 0.04) +
+  scale_x_sqrt() +
+  xlab("Debt To Income Ratio")
+```
+
+3/4 have a debt to income ratio less than 31%, with 25 exceeding 1000%.
+
+## Reordering IncomeRange factor
+```{r}
+# middle income tend to borrow more
+# low inclome have difficult access to loans
+# higher income borrow less
+table(pl_subsamp$IncomeRange)
+is.factor(pl_subsamp$IncomeRange)
+levels(pl_subsamp$IncomeRange)
+pl_subsamp.backup.IncomeRange <- pl_subsamp$IncomeRange
+pl_subsamp$IncomeRange <- 
+  factor(pl_subsamp$IncomeRange,
+         levels(pl_subsamp$IncomeRange)[c(7, 8, 1, 2, 4, 5, 6, 3)])
+qplot(data = pl_subsamp, x = IncomeRange,
+      fill = IncomeRange, xlab = "Income Range") +
+  scale_x_discrete(breaks = NULL)
+```
+
+Most of loans are requested by middle-income customers, $25K-$75K.
+
+## Stated Monthly Income
+```{r}
+summary(pl_subsamp$StatedMonthlyIncome)
+qplot(x = StatedMonthlyIncome, data = pl_subsamp,
+      geom = "density") +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99))
+qplot(x = StatedMonthlyIncome, data = pl_subsamp,
+      binwidth = 500) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99))
+qplot(x = StatedMonthlyIncome, data = pl_subsamp,
+      binwidth = 0.1) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99)) +
+  scale_x_log10()
+```
+
+A lognormal distribution.
+
+## Loan Original Amount
+```{r}
+# some peaks around 4k, 11k, 16k, 21k, 26k
+# distribution like bi-modal at 4k and 16k
+summary(pl_subsamp$LoanOriginalAmount)
+qplot(data = pl_subsamp, x = LoanOriginalAmount,
+      binwidth = 1000, geom = "density",
+      xlab = "Loan Original Amount")
+qplot(data = pl_subsamp, x = LoanOriginalAmount,
+      binwidth = 1000,
+      xlab = "Loan Original Amount") +
+  scale_x_continuous(breaks = seq(0, 35000, 5000))
+qplot(data = pl_subsamp, x = LoanOriginalAmount,
+      binwidth = 5000,
+      xlab = "Loan Original Amount") +
+  scale_x_continuous(breaks = seq(0, 35000, 5000))
+qplot(data = pl_subsamp, x = LoanOriginalAmount,
+      binwidth = 0.2,
+      xlab = "Loan Original Amount") +
+  scale_x_log10()
+qplot(data = pl_subsamp, x = LoanOriginalAmount,
+      binwidth = 20,
+      xlab = "Loan Original Amount") +
+  scale_x_sqrt()
+```
+
+There are some peaks for the original amount at 4K, 11K and 16K. Mean is ~$8400.
+
+## Loan Origination Date
+```{r}
+str(pl_subsamp)
+pl_subsamp$LoanOriginationDate <-
+  as.Date(pl_subsamp$LoanOriginationDate, "%Y-%m-%d")
+str(pl_subsamp)
+
+pl_subsamp.Dates <-
+  subset(pl_subsamp, select = c(LoanOriginationDate, BorrowerRate)) %>% 
+  separate(LoanOriginationDate, c("Year", "Month", "Day"), sep = "-") %>% 
+  dplyr::select(-Day)
+
+pl_subsamp.Dates$YearCut <-
+  as.Date(cut(pl_subsamp$LoanOriginationDate, breaks = "year"))
+pl_subsamp.Dates$MonthCut <-
+  as.Date(cut(pl_subsamp$LoanOriginationDate, breaks = "month"))
+
+qplot(x = Year, data = pl_subsamp.Dates)
+
+pl_subsamp.Dates %>% 
+  dplyr::select(c(Month, Year)) %>% 
+  group_by(Year) %>% 
+  summarise(MinMonth = min(Month), 
+            MaxMonth = max(Month))
+```
+
+A drop in loans in 2009 followed by increasing loans thereafter. This trend can be explained by the continuous decrease in interest rates since the crisis.
+Data for 2005 and 2014 does not cover all the year, that's why we don't have too many observations for these years.
+No loans were granted between 11/2008 and 04/2009.
+
+## Monthly Loan Payment
+```{r}
+# lognormal distribution
+summary(pl_subsamp$MonthlyLoanPayment)
+qplot(data = pl_subsamp, x = MonthlyLoanPayment,
+      binwidth = 150) +
+  xlab("Monthly Loan Payment")
+qplot(data = pl_subsamp, x = MonthlyLoanPayment,
+      binwidth = 0.2) +
+  scale_x_log10() +
+  xlab("Monthly Loan Payment")
+qplot(data = pl_subsamp, x = MonthlyLoanPayment,
+      binwidth = 4) +
+  scale_x_sqrt() +
+  xlab("Monthly Loan Payment")
+```
+
+The mean of monthly loans is $293.3.
+
+## Computing fees
+```{r}
+# almost all fees are 1%
+pl_subsamp$Fees <- with(pl_subsamp, BorrowerRate - LenderYield)
+summary(pl_subsamp$Fees)
+with(pl_subsamp, cor.test(BorrowerRate, LenderYield))
+```
+
+BorrowerRate and LenderYield are heavily correlated. We'll keep only one of them.
+
+## MonthlyDebtAmount = DebtToIncomeRatio * StatedMonthlyIncome
+```{r}
+pl_subsamp$MonthlyDebtAmount <-
+  with(pl_subsamp, DebtToIncomeRatio * StatedMonthlyIncome)
+
+summary(pl_subsamp$MonthlyDebtAmount)
+qplot(x = MonthlyDebtAmount, data = pl_subsamp, binwidth = 100) +
+  scale_x_continuous(limits = c(0, 5000), 
+                     breaks = seq(0, 5000, 500)) +
+  xlab("Monthly Debt Amount")
+qplot(x = MonthlyDebtAmount, data = pl_subsamp) +
+  scale_x_log10() +
+  xlab("Monthly Debt Amount")
+```
+
+Mean debt amount is ~$1200.
+
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+There are 100K+ observations and 81 variables. We decide to keep only 16.
+Following are the retained variables: ProsperScore, Term, LoanStatus, BorrowerRate, LenderYield, ListingCategory..numeric., EmploymentStatus, EmploymentStatusDuration, IsBorrowerHomeowner, CurrentCreditLines, DebtToIncomeRatio, IncomeRange, StatedMonthlyIncome, LoanOriginalAmount, LoanOriginationDate, MonthlyLoanPayment.
+ProsperScore is an oridnal variable with values going from 1 (higher risk) to 11 (lower risk).
+LoanStatus, EmploymentStatus, IsBorrowerHomeowner, ListingCategory are categorical variables.
+IncomeRange is an interval variable.
+
+The size of the sample will be cut to 10K in order to speed up processing.
+
+### What is/are the main feature(s) of interest in your dataset?
+I would like to build a model that predicts how much a borrower would pay for a loan.
+The main feature is BorrowerRate.
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+I will test all the features in the dataset, and filter them at each step of the analysis. However, I 've decided to remove some of them. Here are the reasons:
+  - MonthlyLoanPayment: it can be implied from the loan duration, the rate and amount
+  - ListingCategory: all categories are related to consumption, thus I don't think it could have an impact on rates
+  - Fees: almost all fees are 1%
+  - LenderYield: linear relationship with BorrowerRate
+  
+```{r}
+# deleting some features
+pl_subsamp <- subset(pl_subsamp,
+                     select = -c(MonthlyLoanPayment, 
+                                 ListingCategory, 
+                                 LenderYield, Fees))
+dim(pl_subsamp)
+```
+
+### Did you create any new variables from existing variables in the dataset?
+- +- Fees = LenderYield - BorrowerRate
+Most fees (LenderYield-BorrowerRate) are equal to 1% (99.9% quantile). So I decided to remove them afterward along with LenderYield in order to avoid a multicollinearity problem.
+- + MonthlyDebtAmount = StatedMonthlyIncome * DebtToIncomeRatio
+- + ListingCategory: created by mapping ListingCategory..numeric. to meaningful descriptions
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+LoanOriginalAmount have an unusual distribution. Indeed, although many amounts are in the range $1K-$10K, we observe peaks at 4K, 11K, 16K, 21K and 26K. Groupings the amount in chunks of 5K displays a more bell-like histogram.
+
+
+# Bivariate Plots Section
+```{r echo=FALSE, Bivariate_Plots}
+# Scatterplot Matrix
+theme_set(theme_minimal(20))
+set.seed(2015)
+#ggpairs(pl_subsamp[sample.int(nrow(pl_subsamp), 1000), ])
+#ggsave("~/Projects/P4_Explore_and_Summarize_Data/plots/matrix4.png")
+```
+
+## ProsperScore vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, ProsperScore, summary))
+qplot(x = ProsperScore, y = BorrowerRate,
+      data = subset(pl_subsamp, !is.na(ProsperScore)), 
+      geom = "boxplot") +
+  xlab("Prosper Score") +
+  ylab("Rate")
+
+qplot(x = ProsperScore, y = BorrowerRate,
+      data = subset(pl_subsamp, ProsperScore %in% c(10, 11)), 
+      geom = "boxplot") +
+  xlab("Prosper Score by Term (M)") +
+  ylab("Rate") +
+  facet_wrap(~Term)
+```
+
+Inversely proportional.
+However, loans with scoring 11 have higher rates than those scoring 10, which is unintuitive. What could be the reason?
+The second plot helps us explain this phenomenon. Indeed, there are no loans with a score of 11 and a term of 12 months. 12 months loans happen to be those with the lowest rates.
+
+## Term vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, Term, summary))
+qplot(x = Term, y = BorrowerRate,
+      data = pl_subsamp, geom = "boxplot") +
+  xlab("Term (M)") +
+  ylab("Rate")
+```
+
+1 year loans have the lower rate. 3 and 5 years loans have almost the same mean, with more volatility on 3 years loans.
+3 and 5 years loans means are not very different. Maybe there is more demand on 3 years loans thus putting more pressure on 3 years rates.
+
+## LoanStatus vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, LoanStatus, summary))
+qplot(x = LoanStatus, y = BorrowerRate,
+       data = pl_subsamp, geom = "boxplot", fill = LoanStatus) +
+  scale_x_discrete(breaks = NULL) +
+  xlab("Loan Status") +
+  ylab("Rate")
+```
+
+Even if defaulted loans are among loans with the lowest rates, it does not necessarily mean that they are actually. One possibility, is that those loans were granted during a period of low rates. We'll try to figure this out in the next section.
+
+## EmploymentStatus vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, EmploymentStatus, summary))
+qplot(x = EmploymentStatus, y = BorrowerRate,
+      data = subset(pl_subsamp, EmploymentStatus != ""),
+      geom = "boxplot", fill = EmploymentStatus) +
+  scale_x_discrete(breaks = NULL) +
+  xlab("Employment Status") +
+  ylab("Rate")
+```
+
+Full/Part-timers and retired pay lower rates.
+Non-employed pay higher rates.
+
+## EmploymentStatusDuration vs. BorrowerRate
+```{r}
+ggplot(aes(x = EmploymentStatusDuration, y = BorrowerRate),
+      data = pl_subsamp) +
+  geom_point(alpha = 1/5) +
+  xlab("Employment Duration") +
+  ylab("Rate")
+with(pl_subsamp, cor.test(EmploymentStatusDuration, BorrowerRate))
+```
+
+We don't observe any pattern. Moreover the correlation is almost non existent.
+
+## BorrowerHomeowner vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, IsBorrowerHomeowner, summary))
+qplot(x = IsBorrowerHomeowner, y = BorrowerRate,
+      data = pl_subsamp, geom = "boxplot") +
+  xlab("Home Ownership") +
+  ylab("Rate")
+```
+
+Home owners pay lower rates in average. Probably because they bring more guarantees to the bank.
+
+## CurrentCreditLines vs. BorrowerRate
+```{r}
+pl_subsamp.EmploymentStatusDurationCut <-
+  cut(pl_subsamp$EmploymentStatusDuration, 
+      breaks = c(seq(0, 119, 12), seq(120, 599, 120), 634))
+by(pl_subsamp$BorrowerRate, pl_subsamp.EmploymentStatusDurationCut, summary)
+ggplot(aes(x = CurrentCreditLines, y = BorrowerRate),
+      data = subset(pl_subsamp, !is.na(CurrentCreditLines))) +
+  geom_point(alpha = 1/5, position = "jitter") +
+  xlab("Current Credit Lines") +
+  ylab("Rate")
+with(pl_subsamp, cor.test(CurrentCreditLines, BorrowerRate))
+```
+
+There is no clear pattern.
+
+## DebtToIncomeRatio vs. BorrowerRate
+```{r}
+ggplot(aes(x = DebtToIncomeRatio, y = BorrowerRate),
+       data = subset(pl_subsamp, !is.na(DebtToIncomeRatio))) +
+  geom_point(alpha = 1/5) +
+  coord_cartesian(xlim = c(0, 1)) +
+  xlab("Debt To Income Ratio") +
+  ylab("Rate")
+with(pl_subsamp, cor.test(DebtToIncomeRatio, BorrowerRate))
+```
+
+The trend is not very marked, but there is a positive correlation between DebtToIncomeRatio and BorrowerRate.
+
+## IncomeRange vs. BorrowerRate
+```{r}
+with(pl_subsamp, by(BorrowerRate, IncomeRange, summary))
+qplot(x = IncomeRange, y = BorrowerRate,
+     data = pl_subsamp, geom = "boxplot",
+     fill = IncomeRange) +
+  scale_x_discrete(breaks = NULL) +
+  xlab("Income Range") +
+  ylab("Rate")
+```
+
+The higher the income, the lower the rate.
+Suprisingly, many customers reporting $0 income have low rates.
+
+## StatedMonthlyIncome vs. BorrowerRate
+```{r}
+ggplot(aes(x = StatedMonthlyIncome, y = BorrowerRate),
+       data = subset(pl_subsamp, !is.na(StatedMonthlyIncome))) +
+  geom_point(alpha = 1/5, na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99)) +
+  xlab("Stated Monthly Income") +
+  ylab("Rate") +
+  geom_smooth(method = "lm", color = "red", na.rm = TRUE)
+with(pl_subsamp, cor.test(StatedMonthlyIncome, BorrowerRate))
+```
+
+The trend is not clear, but given the correlation, those reporting higher wages pay less rates.
+
+## LoanOriginalAmount vs. BorrowerRate
+```{r}
+ggplot(aes(x = LoanOriginalAmount / 1000, y = BorrowerRate),
+       data = pl_subsamp) +
+  geom_point(alpha = 1/5) +
+  xlab("Loan Original Amount, 1K") +
+  ylab("Rate") +
+  facet_wrap(~IncomeRange)
+```
+
+High-incomes have access to high amounts.
+
+## Year/Month vs. BorrowerRate
+```{r}
+ggplot(aes(x = MonthCut, y = BorrowerRate),
+       data = pl_subsamp.Dates) +
+  stat_summary(fun.y = median, geom = "bar") +
+  scale_x_date(labels = date_format("%m-%Y"), breaks = "18 months") +
+  stat_smooth() +
+  xlab("Rate") +
+  ylab("Month")
+
+ggplot(aes(x = YearCut, y = BorrowerRate),
+       data = pl_subsamp.Dates) +
+  stat_summary(fun.y = median, geom = "bar") +
+  scale_x_date(labels = date_format("%Y"), breaks = "1 year") +
+  stat_smooth() +
+  xlab("Year") +
+  ylab("Rate")
+```
+
+Rates reached a peak in 2010/2011 and a bottom in 2008/2014.
+
+## MonthlyDebtAmount vs. BorrowerRate
+```{r}
+ggplot(aes(x = MonthlyDebtAmount, y = BorrowerRate),
+       data = subset(pl_subsamp, !is.na(MonthlyDebtAmount))) +
+  geom_point(alpha = 1/5, na.rm = TRUE) +
+  xlab("Monthly Debt Amount") +
+  ylab("Rate") +
+  xlim(0, quantile(pl_subsamp$MonthlyDebtAmount, 0.99, na.rm = TRUE))
+```
+
+There is no clear pattern in this visualisation.
+
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+BorrowerRate decreases with the risk profile. Lower the risk, lower is the rate.
+BorrowerRate increases with the loan's term.
+BorrowerRate is low for full/part-time employees and retired, and high for non-employed.
+BorrowerRate is low for home owners.
+BorrowerRate is low for high-incomes, high for low-incomes.
+High-incomes have more access to credit.
+High-incomes can borrow higher amounts.
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+From the scatterplot matrix, we observe a correlation between:
+- Negative: StatedMonthlyIncome and DebtToIncomeRatio
+- Positive: StatedMonthlyIncome and LoanOriginalAmount
+- Positive: StatedMonthlyIncome and CurrentCreditLines
+- Positive: CurrentCreditLines and MonthlyDebtAmount
+```{r}
+ggplot(aes(x = StatedMonthlyIncome, y = DebtToIncomeRatio),
+       data = pl_subsamp) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99, na.rm = TRUE)) +
+  ylim(0, quantile(pl_subsamp$DebtToIncomeRatio, 0.99, na.rm = TRUE)) +
+  geom_point(alpha = 1/5, na.rm = TRUE) +
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  xlab("Monthly Income") + ylab("Debt Ratio")
+with(pl_subsamp, cor.test(StatedMonthlyIncome, DebtToIncomeRatio))
+
+ggplot(aes(x = StatedMonthlyIncome, y = LoanOriginalAmount),
+       data = pl_subsamp) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99, na.rm = TRUE)) +
+  ylim(0, quantile(pl_subsamp$LoanOriginalAmount, 0.99, na.rm = TRUE)) +
+  geom_point(alpha = 1/5, na.rm = TRUE) +
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  xlab("Monthly Income") + ylab("Loan Amount")
+with(pl_subsamp, cor.test(StatedMonthlyIncome, LoanOriginalAmount))
+
+ggplot(aes(x = StatedMonthlyIncome, y = CurrentCreditLines),
+       data = pl_subsamp) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome, 0.99, na.rm = TRUE)) +
+  ylim(0, quantile(pl_subsamp$CurrentCreditLines, 0.99, na.rm = TRUE)) +
+  geom_point(alpha = 1/5) +
+  geom_smooth(method = "lm") +
+  xlab("Monthly Income") + ylab("Credit Lines")
+with(pl_subsamp, cor.test(StatedMonthlyIncome, CurrentCreditLines))
+
+ggplot(aes(x = CurrentCreditLines, y = MonthlyDebtAmount),
+       data = pl_subsamp) +
+  xlim(0, quantile(pl_subsamp$CurrentCreditLines, 0.99, na.rm = TRUE)) +
+  ylim(0, quantile(pl_subsamp$MonthlyDebtAmount, 0.99, na.rm = TRUE)) +
+  geom_point(alpha = 1/5, na.rm = TRUE) +
+  geom_smooth(method = "lm", na.rm = TRUE) +
+  xlab("Credit Lines") + ylab("Monthly Debt Amount")
+with(pl_subsamp, cor.test(CurrentCreditLines, MonthlyDebtAmount))
+```
+
+More you earn, more borrowing capacity you have.
+More you earn, more debt you accumulate.
+
+### What was the strongest relationship you found?
+The strongest relationship I found is between CurrentCreditLines and MonthlyDebtAmount. As you accumulate more debt, your monthly payments increase.
+
+
+# Multivariate Plots Section
+
+```{r echo=FALSE, Multivariate_Plots}
+pl_subsamp$Year <- pl_subsamp.Dates$Year
+```
+
+## Term vs. BorrowerRate by Year
+```{r}
+ggplot(aes(x = Term, y = BorrowerRate),
+      data = pl_subsamp) +
+  geom_boxplot() +
+  facet_wrap(~Year) +
+  xlab("Rate") + ylab("Term (M)")
+```
+
+Before 2010, there were only 3y loans. In 2010 appeared the first 5y loans. The year after appeared 1y loans.
+The 5y loans were attractive at the beginning as they offered lower rates than 3y loans. However they increased till surpassing 3y rates, which is more common.
+
+## LoanStatus vs. BorrowerRate by Year
+```{r}
+qplot(x = LoanStatus, y = BorrowerRate,
+       data = pl_subsamp, geom = "boxplot",
+      fill = LoanStatus) +
+  scale_x_discrete(breaks = NULL) +
+  xlab("") + ylab("Term (M)") +
+  facet_wrap(~Year)
+```
+
+Unlike what we observed in the bivariate plots, it's clear here that defaulted loans were borrowed at higher rates.
+
+## DebtToIncomeRatio vs. BorrowerRate by Year
+```{r}
+ggplot(aes(x = DebtToIncomeRatio, y = BorrowerRate, color = Year),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlab("Debt Ratio") + ylab("Rate") +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio, 0.99, na.rm = TRUE)) +
+  scale_color_brewer(name = "Prosper Score", type = "div")
+
+ggplot(aes(x = DebtToIncomeRatio, y = BorrowerRate, color = ProsperScore),
+       data = subset(pl_subsamp, !is.na(ProsperScore))) +
+  geom_point(na.rm = TRUE) +
+  xlab("Debt Ratio") + ylab("Rate") +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio, 0.99, na.rm = TRUE)) +
+  scale_color_brewer(name = "Prosper Score", type = "div") +
+  facet_wrap(~Year)
+```
+
+Less risky customers are offered lower rates.
+
+## StatedMonthlyIncome vs. BorrowerRate by Year
+```{r}
+# Coloring by ProsperScore
+ggplot(aes(x = StatedMonthlyIncome / 1000, y = BorrowerRate,
+           color = ProsperScore),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome/1000, 0.99)) +
+  xlab("Monthly Income, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Prosper Score", type = "div") +
+  facet_wrap(~Year)
+
+# Coloring by Term
+ggplot(aes(x = StatedMonthlyIncome / 1000, y = BorrowerRate,
+           color = Term),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome/1000, 0.99, na.rm = TRUE)) +
+  xlab("Monthly Income, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Term", type = "div") +
+  facet_wrap(~Year)
+
+# Coloring by DebtToIncomeRatio
+summary(pl_subsamp$DebtToIncomeRatio)
+pl_subsamp.DebtToIncomeRatioCut <-
+  cut(pl_subsamp$DebtToIncomeRatio, 
+      breaks = c(seq(0, 1, 0.2), 11))
+ggplot(aes(x = StatedMonthlyIncome / 1000, y = BorrowerRate,
+           color = pl_subsamp.DebtToIncomeRatioCut),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome/1000, 0.99, na.rm = TRUE)) +
+  xlab("Monthly Income, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Debt Ratio", type = "div") +
+  facet_wrap(~Year)
+
+# Coloring by CurrentCreditLines
+summary(pl_subsamp$CurrentCreditLines)
+pl_subsamp.CurrentCreditLinesCut <-
+  cut(pl_subsamp$CurrentCreditLines, 
+      breaks = c(seq(0, 20, 5), 54))
+ggplot(aes(x = StatedMonthlyIncome / 1000, y = BorrowerRate,
+           color = pl_subsamp.CurrentCreditLinesCut),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome/1000, 0.99, na.rm = TRUE)) +
+  xlab("Monthly Income, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Credit Lines", type = "div") +
+  facet_wrap(~Year)
+
+# Coloring by IsBorrowerHomeowner
+ggplot(aes(x = StatedMonthlyIncome / 1000, y = BorrowerRate,
+           color = IsBorrowerHomeowner),
+       data = pl_subsamp) +
+  geom_point(na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$StatedMonthlyIncome/1000, 0.99, na.rm = TRUE)) +
+  xlab("Monthly Income, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Home Owner", type = "div") +
+  facet_wrap(~Year)
+```
+
+ProsperScore is the only variable drawing a distinct frontier between different levels of rate.
+To explain the rate by other variables, we should imagine a combination of them.
+Non owners are mostly on the left of the plot; they have less income, but they could pay lower rates.
+
+## MonthlyDebtAmount vs. BorrowerRate by Year
+```{r}
+# Coloring by IncomeRange
+ggplot(aes(x = MonthlyDebtAmount / 1000, y = BorrowerRate,
+           color = IncomeRange),
+       data = pl_subsamp) +
+  geom_point(alpha = 1/2, size = 2, position = "jitter", na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$MonthlyDebtAmount/1000, 0.99, na.rm = TRUE)) +
+  xlab("Monthly Debt, 1K") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Monthly Income", type = "div") +
+  facet_wrap(~Year)
+
+# DebtToIncomeRatio vs. BorrowerRate by Year
+# Coloring by IncomeRange
+ggplot(aes(x = DebtToIncomeRatio * 100, y = BorrowerRate,
+           color = IncomeRange),
+       data = pl_subsamp) +
+  geom_point(alpha = 1/2, size = 2, position = "jitter", na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio*100, 0.99, na.rm = TRUE)) +
+  xlab("Debt Ratio, %") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Monthly Income", type = "div") +
+  facet_wrap(~Year)
+```
+
+The higher the income, the higher the debt, the less the rate.
+The higher the income, the less the debt ratio, the less the rate.
+
+## Building a Linear Model
+```{r}
+m1 <- lm(I(BorrowerRate) ~ I(as.numeric(as.character(Term))), data = pl_subsamp)
+m2 <- update(m1, ~ . + DebtToIncomeRatio)
+m3 <- update(m2, ~ . + StatedMonthlyIncome)
+m4 <- update(m3, ~ . + as.logical(IsBorrowerHomeowner))
+m5 <- update(m4, ~ . + as.numeric(as.character(Year)))
+mtable(m1, m2, m3, m4, m5)
+
+# Model m3
+standardLoan <- data.frame(Term = 36, DebtToIncomeRatio = 0.33, 
+                           StatedMonthlyIncome = 5000)
+riskyLoan <- data.frame(Term = 60, DebtToIncomeRatio = 0.8, 
+                           StatedMonthlyIncome = 8000)
+lowIncomeLoan <- data.frame(Term = 12, DebtToIncomeRatio = 0.2, 
+                           StatedMonthlyIncome = 2000)
+extremeLoan <- data.frame(Term = 60, DebtToIncomeRatio = 10, 
+                           StatedMonthlyIncome = 5000)
+
+modelSLEstimate <- predict(m3, newdata = standardLoan,
+                        interval="prediction", level = .95)
+print(modelSLEstimate)
+modelRLEstimate <- predict(m3, newdata = riskyLoan,
+                        interval="prediction", level = .95)
+print(modelRLEstimate)
+modelLILEstimate <- predict(m3, newdata = lowIncomeLoan,
+                        interval="prediction", level = .95)
+print(modelLILEstimate)
+modelELEstimate <- predict(m3, newdata = extremeLoan,
+                        interval="prediction", level = .95)
+print(modelELEstimate)
+
+# Model m5
+standardLoan <- data.frame(Term = 36, DebtToIncomeRatio = 0.33, 
+                           StatedMonthlyIncome = 5000, IsBorrowerHomeowner = TRUE,
+                           Year = 2013)
+riskyLoan <- data.frame(Term = 60, DebtToIncomeRatio = 0.8, 
+                        StatedMonthlyIncome = 8000, IsBorrowerHomeowner = FALSE,
+                        Year = 2009)
+lowIncomeLoan <- data.frame(Term = 12, DebtToIncomeRatio = 0.2, 
+                           StatedMonthlyIncome = 2000, IsBorrowerHomeowner = FALSE,
+                           Year = 2013)
+extremeLoan <- data.frame(Term = 60, DebtToIncomeRatio = 10, 
+                           StatedMonthlyIncome = 5000, IsBorrowerHomeowner = FALSE,
+                          Year = 2009)
+
+modelSLEstimate <- predict(m5, newdata = standardLoan,
+                        interval="prediction", level = .95)
+print(modelSLEstimate)
+modelRLEstimate <- predict(m5, newdata = riskyLoan,
+                        interval="prediction", level = .95)
+print(modelRLEstimate)
+modelLILEstimate <- predict(m5, newdata = lowIncomeLoan,
+                        interval="prediction", level = .95)
+print(modelLILEstimate)
+modelELEstimate <- predict(m5, newdata = extremeLoan,
+                        interval="prediction", level = .95)
+print(modelELEstimate)
+```
+
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+Given that rate change over time, we've plotted all visualisations by year. We attached a particular focus to StatedMonthlyIncome as it is an important variable when asking for a loan.
+ProsperScore was the only variable drawing a clear frontier between different rates. All other variables showed fuzzy visualisations and we couldn't draw any conclusion.
+However, 
+
+### Were there any interesting or surprising interactions between features?
+The insteresting interaction came from defaulted loans. Indeed, back in the bivariate analysis, we found that loans that resulted in a default were among the loans with lower rates. Visualising by year showed that it's not true. Most probably many defaults happened when rates were low.
+Central banks do lower rates in crisis periods in order to boost the ecenomy (low rates, more loans, more consumption and more investing, etc ..).
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+I've build 2 linear models:
+  - 1st is based on Term, DebtToIncomeRatio, StatedMonthlyAmount
+  - 2nd is based on IsBorrowerHomeowner, Year on top of model 1
+Tested on 3 different profiles, they both give close values, ordered as expected: higher rate for risky, less for low income and less for standard profiles. The values of the predicted rate are close (all around 18%/19%) which is around the mean for those profiles. For a confidence interval of 95%, lower and upper values were also close.
+So this model is good to give an idea of what would be the average rate for a profile.
+For extreme cases, our extreme profile have a rate 6% to 8% higher than other profiles, and an lower/upper values of 12%/41% for a confidence interval of 95%, wihch is good enough.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+p1 <- ggplot(aes(x = Year),
+             data = subset(pl_subsamp,
+                           LoanStatus == "Defaulted")) +
+  geom_bar(aes(y = LoanStatus),
+           stat = "identity") +
+  xlab("Year") +
+  ylab("Count")
+
+p2 <- ggplot(aes(x = Year),
+             data = subset(pl_subsamp,
+                           LoanStatus == "Defaulted")) +
+  geom_line(aes(x = Year, y = BorrowerRate, group = 1, color = "Defaulted"),
+            stat = "summary", fun.y = mean) +
+  geom_line(aes(x = Year, y = BorrowerRate, group = 2, color = "All"),
+            data = pl_subsamp,
+            stat = "summary", fun.y = mean) +
+  scale_colour_manual(values = c("blue", "red")) +
+  xlab("Year") +
+  ylab("Mean Rate") +
+  theme(legend.title = element_blank())
+
+p3 <- qplot(x = Year, data = pl_subsamp)
+
+grid.arrange(p1, p2, p3, nrow = 3)
+```
+
+### Description One
+When we plotted in the second section Rate vs. LoanStatus in box plots, we observed that the defaulted loan are having the smaller rates. Those risky loan were granted with confortable rates, which is non sense. Is the bank making a mistake in evaluating its borrowers?
+Our hypothesis was that most defaulted loans were granted in a period of economic trouble, where rates were systemically low.
+The plot shows that :
+  - most defaults happended for loan issued between 2006-2008
+  - most loans were granted between 2012-1013
+  - mean rates for that periods were close
+These elements, give to some extent, some credit to our hypothesis.
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+ggplot(aes(x = DebtToIncomeRatio, y = BorrowerRate, 
+           color = ProsperScore),
+       data = subset(pl_subsamp, !is.na(ProsperScore))) +
+  geom_point(na.rm = TRUE) +
+  xlab("Debt Ratio") + ylab("Rate") +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio, 0.99, na.rm = TRUE)) +
+  scale_color_brewer(name = "Prosper Score", type = "div") +
+  facet_wrap(~Year)
+```
+
+### Description Two
+DebtToIncomeRatio seem to be one important feature to look at before asking for a loan. Indeed, the less debt you have, the more leverage you have, and the less risk you carry, which end up with you paying low rates than your counterparts.
+However, when we look at this plot, we cannot draw any relationship between the debt ratio and the rate. There seems to be a small positive correlation (2011 is much bigger), but not enough to assert with conviction.
+On the other side, Faceting by ProsperScore, which is the risk property of the loan, we can see clearly that less risky loans pay smaller rates.
+Obviously, the debt ratio is not enough to measure the riskiness of a loan.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+ggplot(aes(x = DebtToIncomeRatio * 100, y = BorrowerRate,
+           color = IncomeRange),
+       data = pl_subsamp) +
+  geom_point(alpha = 1/2, size = 2, position = "jitter", na.rm = TRUE) +
+  xlim(0, quantile(pl_subsamp$DebtToIncomeRatio*100, 0.99, na.rm = TRUE)) +
+  xlab("Debt Ratio, %") +
+  ylab("Rate") +
+  scale_color_brewer(name = "Monthly Income", type = "div") +
+  facet_wrap(~Year)
+```
+
+### Description Three
+High-incomes may not have big debt ratios, but they may pay as much as low-incomes. On the plot, we can see high-incomes on the bottom-left triangle and low incomes on the top-right triangle (especially between 2012 and 2014).
+
+------
+
+# Reflection
+So far, we've been trying to explain the borrower rate by some of the features provided in this data set. Armed with intuition and common sense, we thought that we'll find some patterns and trends easily from the bi-variate plots. However, it turned out to be much tougher. Indeed, all patterns have been dug up in the multi-variate plots section.
+With the selected features, we've build a linear model that fit pretty well some profiles. But given the variance of rates for similar profiles, we'll need to include more features in order to build a better model. This means that we'll need to select other properties of the loans.
